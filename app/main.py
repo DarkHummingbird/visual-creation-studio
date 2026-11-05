@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI,UploadFile,File,Request,HTTPException
 from fastapi.responses import FileResponse,JSONResponse,StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from . import config,files,schemas
+from . import config,files,schemas,model_api
 from .db import DBASE,Conflict,uid
 from .workflow import ENGINE,selected_asset
 from pydantic import ValidationError
@@ -125,6 +125,15 @@ async def import_doc(file:UploadFile=File(...)):
     original=files.ingest(raw,file.filename or '原文.txt','SOURCE')
     text=files.ingest(result['text'].encode(),'提取正文.txt','SOURCE_TEXT')
     return {**result,'fileName':file.filename,'originalAssetId':original['id'],'textAssetId':text['id']}
+@app.post('/api/v1/copy-suggestions')
+def copy_suggestions(p:dict):
+    name=str(p.get('name','')).strip();desc=str(p.get('description','')).strip()
+    if not name:raise ValueError('请先填写商品名称')
+    schema={'type':'object','properties':{'suggestions':{'type':'array','items':{'type':'string'},'minItems':5,'maxItems':5}},'required':['suggestions']}
+    prompt='商品名称：'+name+'\n已知资料：'+(desc or '无')+'\n请为该商品的海报生成5条中文促销短文案：每条不超过12字，风格各异（卖点型、促销型、情感型、行动号召型），适合直接放在商品图上。仅返回JSON。'
+    response=model_api.text(prompt,schema)
+    value=json.loads(response['choices'][0]['message']['content'])
+    return {'suggestions':[str(s).strip()[:20] for s in value.get('suggestions',[]) if str(s).strip()][:5]}
 @app.get('/media/{id}')
 def media(id:str,download:bool=False):
     a=DBASE.asset(id);path=Path(a['path'])

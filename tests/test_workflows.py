@@ -132,3 +132,13 @@ def test_video_ratio_comes_from_settings(setup,monkeypatch):
     body.clear()
     model_api.video('提示',Path('frame.png'),{'resolution':'480P','audio':True,'seconds':5})
     assert body['parameters']['ratio']=='adaptive'
+
+def test_copy_suggestions_uses_text_model(setup,monkeypatch):
+    st,e,c=setup
+    def fake_text(prompt,schema):
+        assert '陶瓷马克杯' in prompt and schema['properties']['suggestions']
+        return {'choices':[{'message':{'content':json.dumps({'suggestions':['手工烧制 温暖如初','今日下单 立减十元','一杯子 一辈子','新品首发 限时包邮','会议室的颜值担当']},ensure_ascii=False)}}]}
+    monkeypatch.setattr(model_api,'text',fake_text)
+    r=c.post('/api/v1/copy-suggestions',json={'name':'陶瓷马克杯','description':'高温陶瓷'})
+    assert r.status_code==200 and len(r.json()['suggestions'])==5
+    assert c.post('/api/v1/copy-suggestions',json={'description':'无名称'}).status_code==400
