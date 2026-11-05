@@ -1,7 +1,7 @@
 import asyncio,base64,io,json,os,time,zipfile,hashlib
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI,UploadFile,File,Request,HTTPException
+from fastapi import FastAPI,UploadFile,File,Form,Request,HTTPException
 from fastapi.responses import FileResponse,JSONResponse,StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from . import config,files,schemas,model_api
@@ -112,11 +112,27 @@ def delete(id:str):
     with DBASE.conn() as c:c.execute('UPDATE drafts SET deleted=1 WHERE id=?',(id,))
     return {'deleted':True,'filesPreserved':True}
 @app.post('/api/v1/assets/upload')
-async def upload(file:UploadFile=File(...)):
+async def upload(file:UploadFile=File(...),name:str=Form('')):
     raw=await file.read(16_000_001)
     if len(raw)>16_000_000:raise ValueError('图片超过16MB，请压缩或转换格式')
     if Path(file.filename or '').suffix.lower() not in ('.png','.jpg','.jpeg','.webp'):raise ValueError('图片仅支持PNG、JPEG、WebP')
-    a=await asyncio.to_thread(files.ingest,raw,file.filename);return {k:v for k,v in a.items() if k!='path'}
+    a=await asyncio.to_thread(files.ingest,raw,file.filename)
+    if name.strip():
+        with DBASE.lock,DBASE.conn() as c:c.execute('UPDATE assets SET name=? WHERE id=?',(name.strip()[:100],a['id']))
+        a=DBASE.asset(a['id'])
+    return {k:v for k,v in a.items() if k!='path'}
+@app.post('/api/v1/assets/{id}/rename')
+def asset_rename(id:str,p:dict):
+    name=str(p.get('name','')).strip()
+    if not name or len(name)>100:raise ValueError('名称需在1至100字之间')
+    with DBASE.lock,DBASE.conn() as c:c.execute('UPDATE assets SET name=? WHERE id=?',(name,id))
+    return DBASE.asset(id)
+@app.post('/api/v1/assets/{id}/group')
+def asset_group(id:str,p:dict):
+    DBASE.asset(id)
+    group=str(p.get('group','')).strip()[:50]
+    with DBASE.lock,DBASE.conn() as c:c.execute('UPDATE assets SET grp=? WHERE id=?',(group,id))
+    return DBASE.asset(id)
 @app.post('/api/v1/import')
 async def import_doc(file:UploadFile=File(...)):
     raw=await file.read(files.MAX_FILE+1)
