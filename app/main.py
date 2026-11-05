@@ -133,6 +133,14 @@ def asset_group(id:str,p:dict):
     group=str(p.get('group','')).strip()[:50]
     with DBASE.lock,DBASE.conn() as c:c.execute('UPDATE assets SET grp=? WHERE id=?',(group,id))
     return DBASE.asset(id)
+ROLES=['商品','背景','构图','品牌','其他']
+@app.post('/api/v1/assets/{id}/role')
+def asset_role(id:str,p:dict):
+    DBASE.asset(id)
+    role=str(p.get('role','')).strip()
+    if role and role not in ROLES:raise ValueError('角色须为：'+'、'.join(ROLES))
+    with DBASE.lock,DBASE.conn() as c:c.execute('UPDATE assets SET role=? WHERE id=?',(role,id))
+    return DBASE.asset(id)
 @app.post('/api/v1/import')
 async def import_doc(file:UploadFile=File(...)):
     raw=await file.read(files.MAX_FILE+1)

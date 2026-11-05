@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,run TEXT,step TEXT,kind 
 ''')
             try:c.execute('ALTER TABLE assets ADD COLUMN grp TEXT DEFAULT ""')
             except sqlite3.OperationalError:pass
+            try:c.execute('ALTER TABLE assets ADD COLUMN role TEXT DEFAULT ""')
+            except sqlite3.OperationalError:pass
     def conn(self):
         return _Session(sqlite3.connect(self.root/'studio-v1.sqlite3',timeout=30))
     def draft(self,id):
@@ -69,7 +71,7 @@ CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,run TEXT,step TEXT,kind 
         return [self.asset(x) for x in ids]
     def add_asset(self,name,kind,path,origin,meta):
         id=uid()
-        with self.lock,self.conn() as c:c.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?,?)',(id,name,kind,str(path),origin,json.dumps(meta,ensure_ascii=False),time.time(),''))
+        with self.lock,self.conn() as c:c.execute('INSERT INTO assets (id,name,kind,path,origin,meta,created,grp) VALUES (?,?,?,?,?,?,?,?)',(id,name,kind,str(path),origin,json.dumps(meta,ensure_ascii=False),time.time(),''))
         return self.asset(id)
     def run(self,id):
         with self.conn() as c:r=c.execute('SELECT * FROM runs WHERE id=?',(id,)).fetchone()
