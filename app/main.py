@@ -172,7 +172,10 @@ def run(id:str):
 def action(id:str,action:str):return {k:v for k,v in ENGINE.control(id,action).items() if k!='snapshot'}
 @app.post('/api/v1/drafts/{id}/export-canvas')
 def export_canvas(id:str,p:dict):
-    raw=base64.b64decode(p['data'].split(',')[-1],validate=True);a=files.ingest(raw,'商品排版.png','CANVAS_EXPORT',{'draftId':id,'width':p.get('width'),'height':p.get('height')})
+    raw=base64.b64decode(p['data'].split(',')[-1],validate=True)
+    name=str(p.get('name') or '商品排版.png').strip()[:100] or '商品排版.png'
+    if not name.lower().endswith(('.png','.jpg','.webp')):name+='.png'
+    a=files.ingest(raw,name,'CANVAS_EXPORT',{'draftId':id,'width':p.get('width'),'height':p.get('height')})
     if a['meta']['width']!=p.get('width') or a['meta']['height']!=p.get('height'):raise ValueError('导出尺寸与请求不符，未登记成品')
     DBASE.patch(id,lambda d:d['exports'].append(a['id']));return a
 @app.get('/api/v1/drafts/{id}/export')

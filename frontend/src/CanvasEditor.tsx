@@ -101,9 +101,71 @@ export default function CanvasEditor({draft,onChange,assets,toast,flush}:{draft:
  {picked.type==='SHAPE'&&<label>颜色<input type="color" value={picked.color} onChange={e=>patch({...picked,color:e.target.value})}/></label>}
  {picked.type==='IMAGE'&&<><textarea placeholder="只修改选中的图片层，例如换成浅色背景" value={edit} onChange={e=>E(e.target.value)}/><button onClick={async()=>{if(!edit.trim())return toast('填写修改要求');if(!await ask('将付费调用图像模型，只生成候选，不覆盖原图。继续？'))return;try{let saved=await flush();await api('/drafts/'+draft.id+'/runs',{kind:'editimage',mutationId:uuid(),baseVersion:saved.version,paidConsent:true,options:{assetId:picked.assetId,prompt:edit,slot:'layer-'+picked.id}});toast('改图开始，结果在下方候选中')}catch(e:any){toast(e.message)}}}>生成改图候选</button></>}
  <label><input type="checkbox" checked={picked.locked} onChange={e=>patch({...picked,locked:e.target.checked})}/>锁定图层</label>
+ {picked.type==='TEXT'&&<label>绑定变量（批量渲染时按款式替换）<select value={picked.var||''} onChange={e=>patch({...picked,var:e.target.value||undefined})}><option value="">无（固定文字）</option><option value="name">品名 = 款式名称</option><option value="price">价格</option><option value="spec">规格</option><option value="points">卖点</option></select></label>}
  <div className="toolbar"><button onClick={()=>{let a=[...doc.layers],i=a.findIndex(x=>x.id===selected);if(i<a.length-1)[a[i],a[i+1]]=[a[i+1],a[i]];set({...doc,layers:a})}}>上移</button><button onClick={()=>{let a=[...doc.layers],i=a.findIndex(x=>x.id===selected);if(i>0)[a[i],a[i-1]]=[a[i-1],a[i]];set({...doc,layers:a})}}>下移</button><button onClick={()=>{set({...doc,layers:doc.layers.filter((x:any)=>x.id!==selected)});select('')}}>删除</button></div></>}
  <h3>背景</h3><select value={bg.type} onChange={e=>setBg('type',e.target.value)}><option value="white">纯白</option><option value="color">纯色</option><option value="gradient">渐变</option><option value="image">图片</option><option value="blur">商品图虚化</option></select>{bg.type!=='white'&&bg.type!=='blur'&&bg.type!=='image'&&<label>颜色<input type="color" value={bg.color1} onChange={e=>setBg('color1',e.target.value)}/></label>}{bg.type==='gradient'&&<label>颜色2<input type="color" value={bg.color2} onChange={e=>setBg('color2',e.target.value)}/></label>}{bg.type==='image'&&<label>背景图片<select value={bg.assetId||''} onChange={e=>setBg('assetId',e.target.value)}><option value="">选择素材库图片</option>{[...assets.filter((a:any)=>a.kind==='IMAGE')].sort((a:any,b:any)=>Number(b.role==='背景')-Number(a.role==='背景')).map((a:any)=><option key={a.id} value={a.id}>{a.role==='背景'?'🖼 ':''}{a.name} · {a.id.slice(0,5)}</option>)}</select></label>}{bg.type==='blur'&&<p className="hint">取画布第一张图片，模糊压暗后垫底。</p>}{bg.type==='image'&&<p className="hint">图片自动铺满画布（等比裁切），作为垫底背景。</p>}
  <h3>AI 文案</h3><button onClick={aiCopy}>基于商品资料生成5条</button>{suggest.map(s=><button className="layer-item" key={s} onClick={()=>useCopy(s)}>{s}</button>)}
  <h3>画布尺寸</h3><select defaultValue="" onChange={e=>{let p=pagePresets[+e.target.value];if(p)resize(p.width,p.height)}}><option value="" disabled>选择尺寸预设</option>{pagePresets.map((p,i)=><option key={i} value={i}>{p.name} {p.width}×{p.height}</option>)}</select><div className="toolbar"><input aria-label="画布宽度" type="number" value={doc.width} onChange={e=>resize(+e.target.value,doc.height)}/><input aria-label="画布高度" type="number" value={doc.height} onChange={e=>resize(doc.width,+e.target.value)}/></div><button onClick={()=>resize(doc.height,doc.width,'COVER')}>交换宽高并等比裁切</button><p className="hint">默认等比留白。图片不会非等比拉伸。尺寸变更保留旧布局。</p>{doc.variants?.length>0&&<select defaultValue="" onChange={e=>{let v=doc.variants[+e.target.value];if(v)set({...v,variants:doc.variants})}}><option value="">恢复已有尺寸布局</option>{doc.variants.map((v:any,i:number)=><option value={i} key={i}>{i+1} · {v.width}×{v.height}</option>)}</select>}</aside>
  <div className="canvas-area"><Stage width={doc.width*scale} height={doc.height*scale} scaleX={scale} scaleY={scale} ref={stage} onMouseDown={e=>{if(e.target===e.target.getStage())select('')}}><Layer>{bgNode}{doc.layers.filter((x:any)=>x.visible!==false).map((x:any)=><Shape key={x.id} item={x} selected={selected===x.id} onSelect={()=>select(x.id)} onChange={patch} onSnap={snap} bgfill={bg.type==='color'?bg.color1:bg.type==='blur'?'#e8ebf0':'#ffffff'}/>)}</Layer><Layer listening={false}>{guides.v.map((x:number,i:number)=><Line key={'v'+i} points={[x,0,x,doc.height]} stroke="#2861c3" strokeWidth={1} dash={[4,4]}/>)}{guides.h.map((y:number,i:number)=><Line key={'h'+i} points={[0,y,doc.width,y]} stroke="#2861c3" strokeWidth={1} dash={[4,4]}/>)}</Layer></Stage><p className="hint">拖动图层时蓝色参考线自动吸附对齐。{doc.width} × {doc.height} px</p></div></div><div className="toolbar" style={{marginTop:14}}><button className="primary" onClick={exportImage}>导出当前尺寸 PNG</button><a className="button" href={'/api/v1/drafts/'+draft.id+'/export'}>打包下载成品、素材与创作记录（ZIP）</a></div><p className="hint">逐个调整尺寸并导出，也可打包下载全部成品与过程记录。</p></div>
+}
+
+
+function CellBg({bg,layers,W,H}:{bg:any,layers:any[],W:number,H:number}){
+ const [cv,setCv]=useState<any>(null);
+ useEffect(()=>{
+  if(bg.type!=='blur'&&bg.type!=='image'){setCv(null);return}
+  const layer=bg.type==='image'?{assetId:bg.assetId}:layers.find((l:any)=>l.type==='IMAGE'&&l.visible!==false);
+  if(!layer||!layer.assetId){setCv(null);return}
+  let alive=true;const im=new window.Image();im.onload=()=>{if(!alive)return;const c=document.createElement('canvas');c.width=W;c.height=H;const ctx=c.getContext('2d')!;const f=Math.max(W/im.width,H/im.height);ctx.filter=bg.type==='blur'?'blur(24px) brightness(.92)':'none';ctx.drawImage(im,(W-im.width*f)/2,(H-im.height*f)/2,im.width*f,im.height*f);setCv(c)};im.src='/media/'+layer.assetId;
+  return()=>{alive=false};
+ },[bg.type,bg.assetId,layers,W,H]);
+ if(bg.type==='color')return <Rect x={0} y={0} width={W} height={H} fill={bg.color1} listening={false}/>;
+ if(bg.type==='gradient')return <Rect x={0} y={0} width={W} height={H} fillLinearGradientStartPoint={{x:0,y:0}} fillLinearGradientEndPoint={{x:0,y:H}} fillLinearGradientColorStops={[0,bg.color1,1,bg.color2]} listening={false}/>;
+ if((bg.type==='blur'||bg.type==='image')&&cv)return <KImage image={cv} width={W} height={H} listening={false}/>;
+ return <Rect x={0} y={0} width={W} height={H} fill="white" listening={false}/>;
+}
+
+function GridCell({cfg,bg,register}:any){
+ const ref=useRef<any>(null);
+ useEffect(()=>{register(cfg.key,ref.current);return()=>register(cfg.key,null)},[cfg.key]);
+ return <Stage width={cfg.W*cfg.sc} height={cfg.H*cfg.sc} scaleX={cfg.sc} scaleY={cfg.sc} ref={ref} listening={false} style={{maxWidth:'100%'}}><Layer><CellBg bg={bg} layers={cfg.layers} W={cfg.W} H={cfg.H}/>{cfg.layers.filter((x:any)=>x.visible!==false).map((x:any)=><Shape key={x.id} item={x} selected={false} onSelect={()=>{}} onChange={()=>{}} bgfill={bg.type==='color'?bg.color1:bg.type==='blur'?'#e8ebf0':'#ffffff'}/>)}</Layer></Stage>;
+}
+
+export function BatchGrid({draft,toast,flush}:{draft:any,toast:any,flush:any}){
+ const data=draft.data;const doc=data.canvas;const bg=doc.bg||{type:'white'};
+ const skus=((data.product&&data.product.skus)||[]);
+ const adoptions=data.adoptions||{};
+ const sizes:any[]=[];const seen:any={};
+ const addSize=(w:number,h:number)=>{const k=w+'x'+h;if(w>=200&&h>=200&&!seen[k]){seen[k]=1;sizes.push({w,h})}};
+ addSize(doc.width,doc.height);(doc.variants||[]).forEach((v:any)=>addSize(v.width,v.height));
+ const hash=JSON.stringify([doc.layers,bg,sizes.map(s=>[s.w,s.h])]);
+ const adoptionFor=(sku:any)=>{const k=Object.keys(adoptions).find(x=>x.startsWith('sku-')&&x.includes(sku.id));return k?adoptions[k]:null};
+ const cells:any[]=[];
+ skus.forEach((sku:any)=>{const aid=adoptionFor(sku);sizes.forEach(sz=>{const f=Math.min(sz.w/doc.width,sz.h/doc.height);
+  const layers=doc.layers.map((x:any)=>{let l:any={...x,locked:true,x:x.x*f+(sz.w-doc.width*f)/2,y:x.y*f+(sz.h-doc.height*f)/2,width:x.width*f,height:x.height*f,fontSize:x.fontSize?x.fontSize*f:undefined};
+   if(l.type==='TEXT'&&l.var)l.text=String(sku[l.var]??'').trim()||'—';
+   if(l.type==='IMAGE'&&l.product&&aid)l.assetId=aid;
+   return l});
+  cells.push({key:sku.id+'@'+sz.w+'x'+sz.h,sku,W:sz.w,H:sz.h,sc:Math.min(170/sz.w,170/sz.h),layers,haveImage:!!aid})})});
+ const [appr,AP]=useState<any>({});const [busy,B]=useState(false);
+ const refs=useRef<any>({});const register=(k:string,v:any)=>{if(v)refs.current[k]=v;else delete refs.current[k]};
+ const fresh=(k:string)=>appr[k]===hash;
+ const stale=(k:string)=>!!appr[k]&&appr[k]!==hash;
+ const approvedCells=cells.filter(c=>fresh(c.key));
+ const doExport=async()=>{if(!approvedCells.length)return toast('先通过至少一张');B(true);try{await flush();let done=0;
+  for(const c of approvedCells){const st=refs.current[c.key];if(!st)continue;const rendered=st.toCanvas({pixelRatio:1/c.sc});const out=document.createElement('canvas');out.width=c.W;out.height=c.H;out.getContext('2d')!.drawImage(rendered,0,0,c.W,c.H);await api('/drafts/'+draft.id+'/export-canvas',{data:out.toDataURL('image/png'),width:c.W,height:c.H,name:(c.sku.name||'款式')+'-'+c.W+'x'+c.H+'.png'});done++}
+  toast('已导出 '+done+' 张通过的成品'+(done<approvedCells.length?'，有 '+ (approvedCells.length-done) +' 张未渲染完成，请稍后重试':''))}
+ catch(e:any){toast(e.message)}finally{B(false)}};
+ return <details className="panel"><summary>批量渲染：一套母版 × 款式 × 尺寸（{cells.length} 张）</summary>
+  {!skus.length&&<p className="hint">先在第 1 步建立商品款式。</p>}
+  {!!skus.length&&!cells.length&&<p className="hint">暂无可用尺寸。</p>}
+  {!!cells.length&&<><p className="hint">每张是母版按该款式的变量（文字层绑定 + 商品图替换）和尺寸渲染的真实效果。逐张通过或退回，导出只包含通过的，且画布改动后通过状态自动失效需重新确认。</p>
+  <div className="batch-grid">{cells.map(c=>{const ok=fresh(c.key),old=stale(c.key);return <div className={'batch-cell '+(ok?'ok':'')} key={c.key}>
+   <GridCell cfg={c} bg={bg} register={register}/>
+   <p className="hint">{c.sku.name} · {c.W}×{c.H}{!c.haveImage&&' · 缺商品图'}</p>
+   {old&&<p className="hint">⚠️ 画布已改动，通过状态失效，请重新确认</p>}
+   <div className="toolbar">{ok?<button onClick={()=>AP((a:any)=>{let n={...a};delete n[c.key];return n})}>↩ 退回</button>:<button className="primary" disabled={!c.haveImage} onClick={()=>AP((a:any)=>({...a,[c.key]:hash}))}>✓ 通过</button>}</div>
+  </div>})}</div>
+  <div className="toolbar"><button className="primary" disabled={busy||!approvedCells.length} onClick={doExport}>{busy?'正在导出…':'导出让通过的 '+approvedCells.length+' 张（登记为成品）'}</button></div></>}
+ </details>;
 }
