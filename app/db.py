@@ -4,6 +4,15 @@ from .config import DATA
 
 def uid():return uuid.uuid4().hex
 class Conflict(Exception):pass
+class _Session:
+    # sqlite3 连接作上下文管理器只提交不关闭；这里补 close，避免句柄泄漏
+    def __init__(self,c):self.c=c;c.row_factory=sqlite3.Row
+    def __enter__(self):return self.c
+    def __exit__(self,exc_type,*_):
+        try:
+            if exc_type is None:self.c.commit()
+            else:self.c.rollback()
+        finally:self.c.close()
 class DB:
     def __init__(self,root=DATA):
         self.root=root;self.lock=threading.RLock();root.mkdir(parents=True,exist_ok=True)
@@ -17,7 +26,7 @@ CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,draft TEXT,kind TEXT,status 
 CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,run TEXT,step TEXT,kind TEXT,request_status TEXT,delivery_status TEXT,remote_id TEXT,response TEXT,asset_id TEXT,error TEXT,input TEXT,created REAL);
 ''')
     def conn(self):
-        c=sqlite3.connect(self.root/'studio-v1.sqlite3',timeout=30);c.row_factory=sqlite3.Row;return c
+        return _Session(sqlite3.connect(self.root/'studio-v1.sqlite3',timeout=30))
     def draft(self,id):
         with self.conn() as c:r=c.execute('SELECT * FROM drafts WHERE id=? AND deleted=0',(id,)).fetchone()
         if not r:raise ValueError('草稿不存在')
